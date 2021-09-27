@@ -1,34 +1,46 @@
-# Pull a pre-built alpine docker image with nginx and python3 installed
-FROM tiangolo/uwsgi-nginx:python3.8-alpine-2020-12-19
 
-# Set the port on which the app runs; make both values the same.
-#
-# IMPORTANT: When deploying to Azure App Service, go to the App Service on the Azure 
-# portal, navigate to the Applications Settings blade, and create a setting named
-# WEBSITES_PORT with a value that matches the port here (the Azure default is 80).
-# You can also create a setting through the App Service Extension in VS Code.
-ENV LISTEN_PORT=5000
-EXPOSE 5000
+#FROM python:3.4
+FROM python:3.6.9
 
-# Indicate where uwsgi.ini lives
-ENV UWSGI_INI uwsgi.ini
+#Install SQL ODBC driver (Debian Buster)
+#https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server?view=sql-server-2017#microsoft-odbc-driver-17-for-sql-server
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+        && curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list
 
-# Tell nginx where static files live. Typically, developers place static files for
-# multiple apps in a shared folder, but for the purposes here we can use the one
-# app's folder. Note that when multiple apps share a folder, you should create subfolders
-# with the same name as the app underneath "static" so there aren't any collisions
-# when all those static files are collected together.
-ENV STATIC_URL /hello_app/static
+RUN apt-get update \
+        && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql17 \
+        && echo "SQL-ODBC Driver Ready"
 
-# Set the folder where uwsgi looks for the app
-WORKDIR /hello_app
+RUN mkdir /code
+WORKDIR /code
 
-# Copy the app contents to the image
-COPY . /hello_app
+#Turbodbc Requirements 
+#https://turbodbc.readthedocs.io/en/latest/pages/getting_started.html#installation
+RUN apt-get update \
+        && apt-get install -y --no-install-recommends dialog \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends libboost-all-dev \
+        && apt-get install -y --no-install-recommends python-dev \
+        && apt-get install -y --no-install-recommends unixodbc-dev \
+        && echo "Turbodbc Req Done"
 
-# If you have additional requirements beyond Flask (which is included in the
-# base image), generate a requirements.txt file with pip freeze and uncomment
-# the next three lines.
-#COPY requirements.txt /
-#RUN pip install --no-cache-dir -U pip
-#RUN pip install --no-cache-dir -r /requirements.txt
+#Install Python Modules requiered by turbodbc
+RUN pip install -U numpy pybind11
+
+#Install App Python Modules
+ADD requirements.txt /code/
+RUN pip install -r requirements.txt
+ADD . /code/
+
+# ssh
+ENV SSH_PASSWD "root:Docker!"
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends openssh-server \
+	&& echo "$SSH_PASSWD" | chpasswd 
+
+COPY sshd_config /etc/ssh/
+COPY init.sh /usr/local/bin/
+	
+RUN chmod u+x /usr/local/bin/init.sh
+EXPOSE 5000 2222
+ENTRYPOINT ["init.sh"]
