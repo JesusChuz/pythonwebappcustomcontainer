@@ -14,7 +14,7 @@ variables:
   imageRepository: 'jesuschuzpythonwebappcustomcontainer'
   containerRegistry: 'jesumeccdevops.azurecr.io'
   dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
-  tag: 'latest'
+  tag: '(BuildId.BuildId)'
 
   # Agent VM image name
   vmImageName: 'ubuntu-latest'
